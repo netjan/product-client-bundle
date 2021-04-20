@@ -1,0 +1,9 @@
+{% extends '@NetJanProductClient/layout.html.twig' %}
+
+{% block netjan_content %}
+    <h2>Utwórz nowy produkt</h2>
+
+    {{ include('@NetJanProductClient/product/_form.html.twig') }}
+
+    <p><a href="{{ path('netjan_product_index') }}">back to list</a></p>
+{% endblock %}

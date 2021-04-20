@@ -1,0 +1,12 @@
+{% extends '@NetJanProductClient/layout.html.twig' %}
+
+{% block netjan_content %}
+    <h2>Edycja produktu</h2>
+
+    {{ include('@NetJanProductClient/product/_form.html.twig', {'button_label': 'Aktualizuj'}) }}
+
+    <p><a href="{{ path('netjan_product_index') }}">back to list</a></p>
+
+    {{ include('@NetJanProductClient/product/_delete_form.html.twig') }}
+
+{% endblock %}

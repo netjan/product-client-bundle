@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset={{ _charset }}" />
+        <title>Produkty</title>
+    </head>
+
+    <body>
+        <h1>Produkty</h1>
+
+        {% for label, messages in app.flashes() %}
+                {% for message in messages %}
+                    <p><strong>{{label}}</strong> {{ message }}</p>
+                {% endfor %}
+            {% endfor %}
+        {% block netjan_content %}{% endblock %}
+    </body>
+</html>

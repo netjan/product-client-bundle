@@ -1,0 +1,29 @@
+{% extends '@NetJanProductClient/layout.html.twig' %}
+
+{% block netjan_content %}
+
+<h2>Produkt</h2>
+<table class="table">
+    <tbody>
+        <tr>
+            <th>Id</th>
+            <td>{{ product.id }}</td>
+        </tr>
+        <tr>
+            <th>Name</th>
+            <td>{{ product.name }}</td>
+        </tr>
+        <tr>
+            <th>Amount</th>
+            <td>{{ product.amount }}</td>
+        </tr>
+    </tbody>
+</table> 
+
+<p><a href="{{ path('netjan_product_index') }}">back to list</a></p>
+
+<p><a href="{{ path('netjan_product_edit', {'id': product.id}) }}">edit</a></p>
+
+{{ include('@NetJanProductClient/product/_delete_form.html.twig') }}
+
+{% endblock %}
