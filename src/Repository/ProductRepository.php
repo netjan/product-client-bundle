@@ -37,7 +37,7 @@ class ProductRepository implements LoggerAwareInterface
         try {
             $response = $this->client->request('GET', 'products/' . $id);
         } catch (\Exception $e) {
-            $this->logger->error($e->getMessage());
+            // $this->logger->error($e->getMessage());
             return 'Connection error';
         }
         $item = \json_decode((string) $response->getBody(), true);
@@ -70,7 +70,7 @@ class ProductRepository implements LoggerAwareInterface
                 ]);
             }
         } catch (\Exception $e) {
-            $this->logger->error($e->getMessage());
+            // $this->logger->error($e->getMessage());
             return 'Connection error';
         }
 
@@ -86,7 +86,7 @@ class ProductRepository implements LoggerAwareInterface
             $product->setAmount($item['amount']);
             $errors = $this->validator->validate($product);
             if (count($errors) > 0) {
-                $this->logger->error((string) $errors);
+                // $this->logger->error((string) $errors);
                 continue;
             }
             $products[] = $product;
@@ -138,7 +138,7 @@ class ProductRepository implements LoggerAwareInterface
         } catch (\Exception $e) {
             $result['error'] = true;
             $result['messages'][] = 'Data saving error!';
-            $this->logger->error($e->getMessage());
+            // $this->logger->error($e->getMessage());
         }
 
         return $result;
@@ -156,7 +156,7 @@ class ProductRepository implements LoggerAwareInterface
         } catch (\Exception $e) {
             $result['error'] = true;
             $result['messages'][] = 'Data saving error!';
-            $this->logger->error($e->getMessage());
+            // $this->logger->error($e->getMessage());
         }
 
         return $result;
@@ -179,7 +179,7 @@ class ProductRepository implements LoggerAwareInterface
         $product->setAmount($propertyAccessor->getValue($item, '[amount]'));
         $errors = $this->validator->validate($product);
         if (count($errors) > 0) {
-            $this->logger->error((string) $errors);
+            // $this->logger->error((string) $errors);
             return;
         }
 
