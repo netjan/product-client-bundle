@@ -24,31 +24,26 @@ class ProductRepositoryTest extends KernelTestCase
     {
         $kernel = self::bootKernel();
 
-        $client = $this->entityManager = $kernel->getContainer()
-            ->get('eight_points_guzzle.client.netjan_product');
-        $validator = Validation::createValidator();
-
-        $this->productRepository = new ProductRepository($client, $validator);
+        $this->productRepository = $kernel->getContainer()
+            ->get(ProductRepository::class);
     }
 
     public function testList()
     {
         $list = $this->productRepository->getList();
-
-        $this->assertSame(true, is_array($list));
+        $this->assertIsArray($list);
 
         $list = $this->productRepository->getList([
             'stock' => true,
         ]);
-
-        // $this->assertSame([], $list);
+        $this->assertIsArray($list);
 
         $list = $this->productRepository->getList([
             'stock' => false,
         ]);
-
-        // $this->assertSame([], $list);
+        $this->assertIsArray($list);
     }
+
 
     public function testSaveEmpty()
     {
@@ -59,87 +54,119 @@ class ProductRepositoryTest extends KernelTestCase
 
     public function testSave()
     {
+        $list = $this->productRepository->getList([
+            'stock' => true,
+        ]);
+        $amountTrue = count($list);
+
+        $list = $this->productRepository->getList([
+            'stock' => false,
+        ]);
+        $amountFalse = count($list);
+
+        $list = $this->productRepository->getList();
+        $amount5 = count($list);
+
         $product = new Product();
 
         $product->setName('name');
         $product->setAmount(1);
         $result = $this->productRepository->save($product);
         $this->assertSame(false, $result['error']);
+        $amountTrue++;
 
         // amount > 0
         $list = $this->productRepository->getList([
             'stock' => true,
         ]);
-        // $this->assertSame(1, count($list));
+        $this->assertSame($amountTrue, count($list));
 
         $product = clone $product;
         $product->setAmount(0);
         $result = $this->productRepository->save($product);
         $this->assertSame(false, $result['error']);
+        $amountFalse++;
 
         // amount = 0
         $list = $this->productRepository->getList([
             'stock' => false,
         ]);
-        // $this->assertSame(1, count($list));
+        $this->assertSame($amountFalse, count($list));
 
         $product = clone $product;
         $product->setAmount(6);
         $result = $this->productRepository->save($product);
         $this->assertSame(false, $result['error']);
+        $amountTrue++;
+        $amount5++;
 
         // amount > 5
         $list = $this->productRepository->getList();
-        // $this->assertSame(1, count($list));
+        $this->assertSame($amount5, count($list));
 
         // amount > 0
         $list = $this->productRepository->getList([
             'stock' => true,
         ]);
-        // $this->assertSame(2, count($list));
+        $this->assertSame($amountTrue, count($list));
 
         $product = clone $product;
         $product->setAmount(5);
         $result = $this->productRepository->save($product);
         $this->assertSame(false, $result['error']);
+        $amountTrue++;
 
         // amount > 5
         $list = $this->productRepository->getList();
-        // $this->assertSame(1, count($list));
+        $this->assertSame($amount5, count($list));
 
         // amount > 0
         $list = $this->productRepository->getList([
             'stock' => true,
         ]);
-        // $this->assertSame(3, count($list));
+        $this->assertSame($amountTrue, count($list));
 
         // amount = 0
         $list = $this->productRepository->getList([
             'stock' => false,
         ]);
-        // $this->assertSame(1, count($list));
+        $this->assertSame($amountFalse, count($list));
     }
 
     public function testSaveAndRemove()
     {
+        $list = $this->productRepository->getList([
+            'stock' => true,
+        ]);
+        $amountTrue = count($list);
+
         $product = new Product();
 
         $product->setName('name');
         $product->setAmount(1);
         $result = $this->productRepository->save($product);
         $this->assertSame(false, $result['error']);
+        $amountTrue++;
+        $productId = $product->getId();
 
         $list = $this->productRepository->getList([
             'stock' => true,
         ]);
-        // $this->assertSame(1, count($list));
+        $this->assertSame($amountTrue, count($list));
+
+        $newProduct = $this->productRepository->find($productId);
+        $this->assertEquals($product, $newProduct);
 
         $result = $this->productRepository->remove($product);
-        // $this->assertSame(false, $result['error']);
+        $this->assertSame(false, $result['error']);
+        $amountTrue--;
 
         $list = $this->productRepository->getList([
             'stock' => true,
         ]);
-        // $this->assertSame(0, count($list));
+        $this->assertSame($amountTrue, count($list));
+
+        $newProduct = $this->productRepository->find($productId);
+        $this->assertEquals(null, $newProduct);
     }
 }

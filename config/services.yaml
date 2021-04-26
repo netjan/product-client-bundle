@@ -9,4 +9,5 @@ services:
         resource: '../src/Repository/'
         autoconfigure: true
         autowire: true
+        public: true # for test
         arguments: ['@eight_points_guzzle.client.netjan_product', '@validator']

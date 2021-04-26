@@ -4,6 +4,7 @@ namespace NetJan\ProductClientBundle\Repository;
 
 use NetJan\ProductClientBundle\Entity\Product;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\ClientException;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Symfony\Component\PropertyAccess\PropertyAccess;
@@ -36,8 +37,10 @@ class ProductRepository implements LoggerAwareInterface
         }
         try {
             $response = $this->client->request('GET', 'products/' . $id);
+        } catch (ClientException $e) {
+            return;
         } catch (\Exception $e) {
-            // $this->logger->error($e->getMessage());
+            $this->logger->error($e->getMessage());
             return 'Connection error';
         }
         $item = \json_decode((string) $response->getBody(), true);
@@ -69,8 +72,10 @@ class ProductRepository implements LoggerAwareInterface
                     ],
                 ]);
             }
+        } catch (ClientException $e) {
+            return;
         } catch (\Exception $e) {
-            // $this->logger->error($e->getMessage());
+            $this->logger->error($e->getMessage());
             return 'Connection error';
         }
 
@@ -86,7 +91,7 @@ class ProductRepository implements LoggerAwareInterface
             $product->setAmount($item['amount']);
             $errors = $this->validator->validate($product);
             if (count($errors) > 0) {
-                // $this->logger->error((string) $errors);
+                $this->logger->error((string) $errors);
                 continue;
             }
             $products[] = $product;
@@ -95,12 +100,13 @@ class ProductRepository implements LoggerAwareInterface
         return $products;
     }
 
-    public function save(Product $product, ?Product $orginalProduct = null)
+    public function save(Product &$product, ?Product $orginalProduct = null)
     {
         $result = [
             'error' => false,
             'messages' => [],
         ];
+        $response = null;
 
         try {
             if (null === $orginalProduct) {
@@ -138,7 +144,22 @@ class ProductRepository implements LoggerAwareInterface
         } catch (\Exception $e) {
             $result['error'] = true;
             $result['messages'][] = 'Data saving error!';
-            // $this->logger->error($e->getMessage());
+            $this->logger->error($e->getMessage());
+        }
+
+        if (null !== $response) {
+            $item = \json_decode((string) $response->getBody(), true);
+            if (empty($item) || !is_array($item)) {
+                $result['error'] = true;
+                $errorMsg = 'Read saved data error!';
+                $result['messages'][] = $errorMsg;
+                $this->logger->error($errorMsg);
+            } elseif (null === ($product = $this->setProduct($item))) {
+                $result['error'] = true;
+                $errorMsg = 'Read saved data error!';
+                $result['messages'][] = $errorMsg;
+                $this->logger->error($errorMsg, $item);
+            }
         }
 
         return $result;
@@ -156,7 +177,7 @@ class ProductRepository implements LoggerAwareInterface
         } catch (\Exception $e) {
             $result['error'] = true;
             $result['messages'][] = 'Data saving error!';
-            // $this->logger->error($e->getMessage());
+            $this->logger->error($e->getMessage());
         }
 
         return $result;
@@ -179,7 +200,7 @@ class ProductRepository implements LoggerAwareInterface
         $product->setAmount($propertyAccessor->getValue($item, '[amount]'));
         $errors = $this->validator->validate($product);
         if (count($errors) > 0) {
-            // $this->logger->error((string) $errors);
+            $this->logger->error((string) $errors);
             return;
         }
 

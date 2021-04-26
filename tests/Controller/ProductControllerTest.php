@@ -31,4 +31,14 @@ class ProductControllerTest extends WebTestCase
         $this->client->request('GET', '/client/product/non-existant');
         $this->assertSame(404, $this->client->getResponse()->getStatusCode());
     }
+
+    public function testList()
+    {
+        $this->client->request('GET', '/client/product');
+        $this->assertSame(301, $this->client->getResponse()->getStatusCode());
+
+        $this->client->request('GET', '/client/product/');
+        $this->assertResponseIsSuccessful();
+        $this->assertSelectorTextContains('h2', 'Lita produktów');
+    }
 }
