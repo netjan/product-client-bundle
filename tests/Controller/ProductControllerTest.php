@@ -2,11 +2,10 @@
 
 namespace NetJan\ProductClientBundle\Tests\Tests\Controller;
 
-use Doctrine\ORM\Tools\SchemaTool;
-use Nelmio\Alice\Loader\NativeLoader;
 use NetJan\ProductClientBundle\Entity\Product;
-use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ProductControllerTest extends WebTestCase
 {
@@ -14,9 +13,9 @@ class ProductControllerTest extends WebTestCase
 
     protected static function getKernelClass(): string
     {
-        require_once __DIR__ . '/../Fixtures/App/src/Kernel.php';
+        require_once __DIR__.'/../Fixtures/TestApp/src/Kernel.php';
 
-        return 'App\Kernel';
+        return 'TestApp\Kernel';
     }
 
     protected function setUp(): void
@@ -24,6 +23,32 @@ class ProductControllerTest extends WebTestCase
         $this->client = self::createClient();
 
         parent::setUp();
+    }
+
+    public function getUrls(): ?\Generator
+    {
+        // product_index
+        yield ['GET', '/client/product/', Response::HTTP_OK];
+        // product_new
+        yield ['GET', '/client/product/new', Response::HTTP_OK];
+        yield ['POST', '/client/product/new', Response::HTTP_OK];
+        // product_show
+        yield ['GET', '/client/product/0', Response::HTTP_NOT_FOUND];
+        // product_edit
+        yield ['POST', '/client/product/0', Response::HTTP_NOT_FOUND];
+        yield ['GET', '/client/product/0/edit', Response::HTTP_NOT_FOUND];
+        // product_delete
+        yield ['POST', '/client/product/0/edit', Response::HTTP_NOT_FOUND];
+    }
+
+    /**
+     * @dataProvider getUrls
+     */
+    public function testUrls(string $method, string $uri, int $statusCode): void
+    {
+        $this->client->request($method, $uri);
+
+        $this->assertResponseStatusCodeSame($statusCode, sprintf('The %s URL loads correctly.', $uri));
     }
 
     public function testGet404()
@@ -38,6 +63,7 @@ class ProductControllerTest extends WebTestCase
         $this->assertSame(301, $this->client->getResponse()->getStatusCode());
 
         $this->client->request('GET', '/client/product/');
+
         $this->assertResponseIsSuccessful();
         $this->assertSelectorTextContains('h2', 'Lita produktów');
 
@@ -59,35 +85,35 @@ class ProductControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
 
         $this->client->submitForm('Zapisz');
-        $this->assertResponseIsSuccessful();
+        $this->assertResponseIsUnprocessable();
         $this->assertSelectorTextContains('li', 'This value should not be blank.');
 
         $this->client->submitForm('Zapisz', [
             'product[name]' => 'Fabien',
             'product[amount]' => '',
         ]);
-        $this->assertResponseIsSuccessful();
+        $this->assertResponseIsUnprocessable();
         $this->assertSelectorTextContains('li', 'This value should not be blank.');
 
         $this->client->submitForm('Zapisz', [
             'product[name]' => '',
             'product[amount]' => 6,
         ]);
-        $this->assertResponseIsSuccessful();
+        $this->assertResponseIsUnprocessable();
         $this->assertSelectorTextContains('li', 'This value should not be blank.');
 
         $crawler = $this->client->submitForm('Zapisz', [
             'product[name]' => 'Fabien',
             'product[amount]' => 'asdd',
         ]);
-        $this->assertResponseIsSuccessful();
+        $this->assertResponseIsUnprocessable();
         $this->assertSelectorTextContains('li', 'This value is not valid.');
 
         $this->client->submitForm('Zapisz', [
             'product[name]' => 'Fabien',
             'product[amount]' => -1,
         ]);
-        $this->assertResponseIsSuccessful();
+        $this->assertResponseIsUnprocessable();
         $this->assertSelectorTextContains('li', 'This value should be greater than or equal to 0.');
 
         $this->client->submitForm('Zapisz', [
@@ -100,6 +126,12 @@ class ProductControllerTest extends WebTestCase
 
     public function testShow()
     {
+        $this->client->request('GET', '/client/product/new');
+        $this->client->submitForm('Zapisz', [
+            'product[name]' => 'Fabien',
+            'product[amount]' => 6,
+        ]);
+
         $crawler = $this->client->request('GET', '/client/product/');
         $this->assertResponseIsSuccessful();
 
@@ -117,6 +149,12 @@ class ProductControllerTest extends WebTestCase
 
     public function testEdit()
     {
+        $this->client->request('GET', '/client/product/new');
+        $this->client->submitForm('Zapisz', [
+            'product[name]' => 'Fabien',
+            'product[amount]' => 6,
+        ]);
+
         $crawler = $this->client->request('GET', '/client/product/');
         $this->assertResponseIsSuccessful();
 
@@ -127,11 +165,11 @@ class ProductControllerTest extends WebTestCase
         $form = $crawler->selectButton('Aktualizuj')->form();
         $values = $form->getValues();
 
-        $form_data = [
+        $formData = [
             'product[name]' => 'Fabien',
             'product[amount]' => 100,
         ];
-        $this->client->submit($form, $form_data);
+        $this->client->submit($form, $formData);
         $this->client->followRedirect();
         $this->assertResponseIsSuccessful();
 
@@ -139,7 +177,7 @@ class ProductControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $newValues = $crawler->selectButton('Aktualizuj')->form()->getValues();
 
-        foreach ($form_data as $key => $value) {
+        foreach ($formData as $key => $value) {
             $this->assertEquals($newValues[$key], $value);
         }
 
@@ -149,7 +187,25 @@ class ProductControllerTest extends WebTestCase
         ]);
         $this->client->followRedirect();
         $this->assertResponseIsSuccessful();
+    }
 
+    public function testThrowNotFoundHttpException()
+    {
+        $this->expectException(NotFoundHttpException::class);
+        $this->expectExceptionMessage('Produkt "1" nie znaleziono.');
 
+        $this->client->catchExceptions(false);
+        $this->client->request('GET', '/client/product/1');
+        $this->assertResponseIsSuccessful();
+    }
+
+    public function testThrowNotFoundHttpExceptionWhenNoRouteFound()
+    {
+        $this->expectException(NotFoundHttpException::class);
+        $this->expectErrorMessageMatches('/No route found for "(.*)client\/product\/no-route-found"/');
+
+        $this->client->catchExceptions(false);
+        $this->client->request('GET', '/client/product/no-route-found');
+        $this->assertResponseIsSuccessful();
     }
 }

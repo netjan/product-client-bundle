@@ -8,10 +8,10 @@
     <li><a href="{{ path('netjan_product_index', {'stock': 'false'}) }}">Nie znajdują się na składzie</a></li>
     <li><a href="{{ path('netjan_product_index') }}">Znajdują się na składzie w ilości większej niż 5</a></li>
 </ul>
-<p>Tablela zwier produkty które
-{% if stock is null %}
+<p>Tablela zwiera produkty, które
+{% if filter.stock is null %}
 znajdują się na składzie w ilości większej niż 5
-{% elseif stock  %}
+{% elseif filter.stock  %}
 znajdują się na składzie
 {% else %}
 nie znajdują się na składzie

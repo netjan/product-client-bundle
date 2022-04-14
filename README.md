@@ -14,7 +14,7 @@ File: `config/routes.yaml`
 ```
 netjan_product:
     prefix: '/client'
-    resource: "@NetJanProductClientBundle/config/routing.yaml"
+    resource: "@NetJanProductClientBundle/config/routing.xml"
 ```
 
 File: `config/packages/eight_points_guzzle.yaml`

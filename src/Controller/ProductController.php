@@ -1,14 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NetJan\ProductClientBundle\Controller;
 
 use NetJan\ProductClientBundle\Entity\Product;
+use NetJan\ProductClientBundle\Exception\ExceptionInterface;
+use NetJan\ProductClientBundle\Filter\ProductFilter;
 use NetJan\ProductClientBundle\Form\ProductType;
 use NetJan\ProductClientBundle\Repository\ProductRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
@@ -16,7 +21,7 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ProductController extends AbstractController
 {
-    private $productRepository;
+    private ProductRepository $productRepository;
 
     public function __construct(ProductRepository $productRepository)
     {
@@ -28,20 +33,22 @@ class ProductController extends AbstractController
      */
     public function index(Request $request): Response
     {
-        $filters = [
-            'stock' => $this->normalizeStock($request->get('stock')),
-        ];
+        $filter = new ProductFilter();
+        $filter->stock = $this->normalizeStock($request->get('stock'));
 
-        $products = $this->productRepository->getList($filters);
-        if (is_string($products)) {
-            $this->addFlash("error", $products);
+        $products = [];
+        try {
+            $products = $this->productRepository->list($filter);
+        } catch (ExceptionInterface $e) {
+            $this->addFlash('error', $e->getMessage());
         }
 
         return $this->render('@NetJanProductClient/product/index.html.twig', [
             'products' => $products,
-            'stock' => $filters['stock'],
+            'filter' => $filter,
         ]);
     }
+
     /**
      * @Route("/new", name="product_new", methods={"GET","POST"})
      */
@@ -52,29 +59,21 @@ class ProductController extends AbstractController
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            $result = $this->productRepository->save($product);
-
-            if (false === $result['error']) {
-                $this->addFlash('success', 'Dane zapisane.');
-
-                return $this->redirectToRoute('netjan_product_index');
-            } else {
-                foreach ($result['messages'] as $message) {
-                    $this->addFlash("error", $message);
-                }
+            if (null !== $response = $this->save($product)) {
+                return $response;
             }
         }
 
-        return $this->render('@NetJanProductClient/product/new.html.twig', [
+        return $this->renderForm('@NetJanProductClient/product/new.html.twig', [
+            'form' => $form,
             'product' => $product,
-            'form' => $form->createView(),
         ]);
     }
 
     /**
-     * @Route("/{id}", name="product_show", methods={"GET"})
+     * @Route("/{id<\d+>}", name="product_show", methods={"GET"})
      */
-    public function show($id): Response
+    public function show(int $id): Response
     {
         $product = $this->getProduct($id);
 
@@ -84,73 +83,79 @@ class ProductController extends AbstractController
     }
 
     /**
-     * @Route("/{id}/edit", name="product_edit", methods={"GET","POST"})
+     * @Route("/{id<\d+>}/edit", name="product_edit", methods={"GET","POST"})
      */
-    public function edit($id, Request $request): Response
+    public function edit(int $id, Request $request): Response
     {
         $product = $this->getProduct($id);
-        $orginalProduct = clone $product;
 
         $form = $this->createForm(ProductType::class, $product);
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            $result = $this->productRepository->save($product, $orginalProduct);
-
-            if (false === $result['error']) {
-                $this->addFlash('success', 'Dane zapisane.');
-
-                return $this->redirectToRoute('netjan_product_index');
-            } else {
-                foreach ($result['messages'] as $message) {
-                    $this->addFlash("error", $message);
-                }
+            if (null !== $response = $this->save($product)) {
+                return $response;
             }
         }
 
-        return $this->render('@NetJanProductClient/product/edit.html.twig', [
+        return $this->renderForm('@NetJanProductClient/product/edit.html.twig', [
             'product' => $product,
-            'form' => $form->createView(),
+            'form' => $form,
         ]);
     }
 
     /**
-     * @Route("/{id}", name="product_delete", methods={"POST"})
+     * @Route("/{id<\d+>}", name="product_delete", methods={"POST"})
      */
-    public function delete($id, Request $request): Response
+    public function delete(int $id, Request $request): Response
     {
         $product = $this->getProduct($id);
 
-        if ($this->isCsrfTokenValid('netjan_product_delete' . $product->getId(), $request->request->get('_token'))) {
-            $result = $this->productRepository->remove($product);
+        if ($this->isCsrfTokenValid('netjan_product_delete'.$product->getId(), $request->request->get('_token'))) {
+            try {
+                $this->productRepository->remove($product);
 
-            if (false === $result['error']) {
                 $this->addFlash('success', 'Dane usunięte.');
-            } else {
-                foreach ($result['messages'] as $message) {
-                    $this->addFlash("error", $message);
-                }
+            } catch (ExceptionInterface $e) {
+                $this->addFlash('error', $e->getMessage());
             }
         }
 
-        return $this->redirectToRoute('netjan_product_index');
+        return $this->redirectToRoute('netjan_product_index', [], Response::HTTP_SEE_OTHER);
     }
 
-    private function getProduct($id): ?Product
+    private function save(Product $product): ?Response
     {
-        $product = $this->productRepository->find($id);
+        try {
+            $this->productRepository->save($product);
+            $this->addFlash('success', 'Dane zapisane.');
 
-        if (null === $product) {
-            throw new NotFoundHttpException();
+            return $this->redirectToRoute('netjan_product_index', [], Response::HTTP_SEE_OTHER);
+        } catch (ExceptionInterface $e) {
+            $this->addFlash('error', $e->getMessage());
         }
 
-        if (is_string($product)) {
-            throw new NotFoundHttpException($product);
+        return null;
+    }
+
+    private function getProduct(int $id): Product
+    {
+        try {
+            $product = $this->productRepository->find($id);
+        } catch (ExceptionInterface $e) {
+            throw new ServiceUnavailableHttpException($e->getMessage());
+        }
+
+        if (null === $product) {
+            throw new NotFoundHttpException(sprintf('Produkt "%d" nie znaleziono.', $id));
         }
 
         return $product;
     }
 
+    /**
+     * @param mixed $stock
+     */
     private function normalizeStock($stock): ?bool
     {
         if (\in_array($stock, [true, 'true', '1'], true)) {

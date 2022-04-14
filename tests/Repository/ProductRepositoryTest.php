@@ -2,171 +2,121 @@
 
 namespace NetJan\ProductClientBundle\Tests\Repository;
 
-use GuzzleHttp\Client;
 use NetJan\ProductClientBundle\Entity\Product;
+use NetJan\ProductClientBundle\Filter\ProductFilter;
 use NetJan\ProductClientBundle\Repository\ProductRepository;
-use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
-use Symfony\Component\Validator\Validation;
+use NetJan\ProductClientBundle\Tests\Fixtures\Helper;
+use PHPUnit\Framework\TestCase;
 
-class ProductRepositoryTest extends KernelTestCase
+class ProductRepositoryTest extends TestCase
 {
-    private $productRepository;
-    private $validator;
-
-    protected static function getKernelClass(): string
+    public function testCreate(): void
     {
-        require_once __DIR__ . '/../Fixtures/App/src/Kernel.php';
-
-        return 'App\Kernel';
+        $client = Helper::getClient(200, '');
+        $testRepository = new ProductRepository($client);
+        $this->assertInstanceOf(ProductRepository::class, $testRepository);
     }
 
-    protected function setUp(): void
+    public function findData(): array
     {
-        $kernel = self::bootKernel();
+        $id = 1;
+        $name = 'Nazwa';
+        $amount = 5;
+        $product = new Product($id);
+        $product->setName($name);
+        $product->setAmount($amount);
 
-        $this->productRepository = $kernel->getContainer()
-            ->get(ProductRepository::class);
+        return [
+            [
+                [],
+                1,
+                null,
+            ],
+            [
+                ['id' => $id, 'name' => $name, 'amount' => $amount],
+                $id,
+                $product,
+            ],
+        ];
     }
 
-    public function testList()
+    /**
+     * @dataProvider findData
+     */
+    public function testFind(array $body, int $id, $expectedProduct)
     {
-        $list = $this->productRepository->getList();
-        $this->assertIsArray($list);
-
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $this->assertIsArray($list);
-
-        $list = $this->productRepository->getList([
-            'stock' => false,
-        ]);
-        $this->assertIsArray($list);
+        $client = Helper::getClient(200, \json_encode($body));
+        $testRepository = new ProductRepository($client);
+        $product = $testRepository->find($id);
+        $this->assertEquals($expectedProduct, $product);
     }
 
-
-    public function testSaveEmpty()
+    public function listData(): array
     {
-        $product = new Product();
-        $result = $this->productRepository->save($product);
-        $this->assertSame(true, $result['error']);
+        $items = [
+            [
+                'id' => 1, 'name' => 'Nazwa', 'amount' => 1,
+            ],
+            [
+                'id' => 2, 'name' => 'Nazwa', 'amount' => 1,
+            ],
+        ];
+
+        return [
+            [
+                $items,
+                null,
+            ],
+            [
+                $items,
+                true,
+            ],
+            [
+                $items,
+                false,
+            ],
+        ];
     }
 
-    public function testSave()
+    /**
+     * @dataProvider listData
+     */
+    public function testList(array $body, ?bool $stock)
     {
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $amountTrue = count($list);
-
-        $list = $this->productRepository->getList([
-            'stock' => false,
-        ]);
-        $amountFalse = count($list);
-
-        $list = $this->productRepository->getList();
-        $amount5 = count($list);
-
-        $product = new Product();
-
-        $product->setName('name');
-        $product->setAmount(1);
-        $result = $this->productRepository->save($product);
-        $this->assertSame(false, $result['error']);
-        $amountTrue++;
-
-        // amount > 0
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $this->assertSame($amountTrue, count($list));
-
-        $product = clone $product;
-        $product->setAmount(0);
-        $result = $this->productRepository->save($product);
-        $this->assertSame(false, $result['error']);
-        $amountFalse++;
-
-        // amount = 0
-        $list = $this->productRepository->getList([
-            'stock' => false,
-        ]);
-        $this->assertSame($amountFalse, count($list));
-
-        $product = clone $product;
-        $product->setAmount(6);
-        $result = $this->productRepository->save($product);
-        $this->assertSame(false, $result['error']);
-        $amountTrue++;
-        $amount5++;
-
-        // amount > 5
-        $list = $this->productRepository->getList();
-        $this->assertSame($amount5, count($list));
-
-        // amount > 0
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $this->assertSame($amountTrue, count($list));
-
-        $product = clone $product;
-        $product->setAmount(5);
-        $result = $this->productRepository->save($product);
-        $this->assertSame(false, $result['error']);
-        $amountTrue++;
-
-        // amount > 5
-        $list = $this->productRepository->getList();
-        $this->assertSame($amount5, count($list));
-
-        // amount > 0
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $this->assertSame($amountTrue, count($list));
-
-        // amount = 0
-        $list = $this->productRepository->getList([
-            'stock' => false,
-        ]);
-        $this->assertSame($amountFalse, count($list));
+        $client = Helper::getClient(200, \json_encode($body));
+        $testRepository = new ProductRepository($client);
+        $filter = new ProductFilter();
+        $filter->stock = $stock;
+        $items = $testRepository->list($filter);
+        $this->assertIsArray($items);
+        $this->assertSame(2, count($items));
     }
 
-    public function testSaveAndRemove()
+    public function saveData(): \Generator
     {
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $amountTrue = count($list);
+        $id = 1;
+        $name = 'Nazwa';
+        $amount = 5;
+        $product = new Product($id);
+        $product->setName($name);
+        $product->setAmount($amount);
+        yield [
+            ['id' => $id, 'name' => $name, 'amount' => $amount],
+            $product,
+        ];
+    }
 
-        $product = new Product();
-
-        $product->setName('name');
-        $product->setAmount(1);
-        $result = $this->productRepository->save($product);
-        $this->assertSame(false, $result['error']);
-        $amountTrue++;
-        $productId = $product->getId();
-
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $this->assertSame($amountTrue, count($list));
-
-        $newProduct = $this->productRepository->find($productId);
-        $this->assertEquals($product, $newProduct);
-
-        $result = $this->productRepository->remove($product);
-        $this->assertSame(false, $result['error']);
-        $amountTrue--;
-
-        $list = $this->productRepository->getList([
-            'stock' => true,
-        ]);
-        $this->assertSame($amountTrue, count($list));
-
-        $newProduct = $this->productRepository->find($productId);
-        $this->assertEquals(null, $newProduct);
+    /**
+     * @dataProvider saveData
+     */
+    public function testSave(array $body, Product $product)
+    {
+        $client = Helper::getClient(200, \json_encode($body));
+        $testRepository = new ProductRepository($client);
+        $expectedProduct = clone $product;
+        $product->setAmount(10);
+        $testRepository->save($product);
+        $expectedProduct->setAmount(10);
+        $this->assertEquals($expectedProduct, $product);
     }
 }

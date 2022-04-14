@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<container xmlns="http://symfony.com/schema/dic/services"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
+
+    <services>
+        <defaults autowire="true" autoconfigure="true" public="false"/>
+
+        <prototype namespace="NetJan\ProductClientBundle\Controller\" resource="../src/Controller">
+            <tag name="controller.service_arguments"/>
+        </prototype>
+
+        <service id="NetJan\ProductClientBundle\ApiClient\Client" alias="netjan.product_client.api_client" />
+        
+        <service id="netjan.product_client.api_client" class="NetJan\ProductClientBundle\ApiClient\Client">
+            <argument type="service" id="eight_points_guzzle.client.netjan_product" />
+        </service>
+
+        <service id="NetJan\ProductClientBundle\Repository\ProductRepository" alias="netjan.product_client.product_repository" />
+        
+        <service id="netjan.product_client.product_repository" class="NetJan\ProductClientBundle\Repository\ProductRepository">
+            <argument type="service" id="netjan.product_client.api_client" />
+        </service>
+    </services>
+</container>

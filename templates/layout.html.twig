@@ -8,11 +8,13 @@
     <body>
         <h1>Produkty</h1>
 
-        {% for label, messages in app.flashes() %}
+        <div id="flashes">
+            {% for label, messages in app.flashes() %}
                 {% for message in messages %}
                     <p><strong>{{label}}</strong> {{ message }}</p>
                 {% endfor %}
             {% endfor %}
+        </div>
         {% block netjan_content %}{% endblock %}
     </body>
 </html>

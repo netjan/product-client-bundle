@@ -1,209 +1,130 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NetJan\ProductClientBundle\Repository;
 
 use NetJan\ProductClientBundle\Entity\Product;
-use GuzzleHttp\ClientInterface;
-use GuzzleHttp\Exception\ClientException;
-use Psr\Log\LoggerAwareInterface;
-use Psr\Log\LoggerAwareTrait;
+use NetJan\ProductClientBundle\Filter\ProductFilter;
 use Symfony\Component\PropertyAccess\PropertyAccess;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
+use NetJan\ProductClientBundle\ApiClient\ClientInterface;
+use NetJan\ProductClientBundle\Exception\ExceptionInterface;
+use NetJan\ProductClientBundle\Exception\ConnectionException;
 
-/**
- * @method Product|null find($id, $lockMode = null, $lockVersion = null)
- * @method Product|null findOneBy(array $criteria, array $orderBy = null)
- * @method Product[]    findAll()
- * @method Product[]    findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null)
- */
-class ProductRepository implements LoggerAwareInterface
+class ProductRepository
 {
-    use LoggerAwareTrait;
+    private const ENTITY_NAME = 'products';
 
-    private $client;
-    private $validator;
+    private ClientInterface $client;
 
-    public function __construct(ClientInterface $netjanProductClient, ValidatorInterface $validator)
+    private ?Product $originalProduct = null;
+
+    public function __construct(ClientInterface $client)
     {
-        $this->client = $netjanProductClient;
-        $this->validator = $validator;
+        $this->client = $client;
     }
 
-    public function find($id)
+    /**
+     * @throws ConnectionException
+     */
+    public function find(int $id): ?Product
     {
-        $id = (int) $id;
-        if (1 > $id) {
-            return;
-        }
         try {
-            $response = $this->client->request('GET', 'products/' . $id);
-        } catch (ClientException $e) {
-            return;
-        } catch (\Exception $e) {
-            $this->logger->error($e->getMessage());
-            return 'Connection error';
-        }
-        $item = \json_decode((string) $response->getBody(), true);
-        if (empty($item) || !is_array($item)) {
-            return;
+            $data = $this->client->find(self::ENTITY_NAME, $id);
+        } catch (ExceptionInterface $e) {
+            $this->throwException($e);
         }
 
-        return $this->setProduct($item);
+        $product = $this->setProduct($data);
+        if (null !== $product) {
+            $this->originalProduct = clone $product;
+        }
+
+        return $product;
     }
 
-    public function getList(?array $filters = [])
+    /**
+     * @throws ConnectionException
+     */
+    public function list(ProductFilter $filter): array
     {
         try {
-            if (!isset($filters['stock']) || null === $filters['stock']) {
-                // amount > 5
-                $response = $this->client->request('GET', 'products');
-            } elseif ($filters['stock']) {
-                // amount > 0
-                $response = $this->client->request('GET', 'products', [
-                    'query' => [
-                        'stock' => 'true'
-                    ],
-                ]);
-            } else {
-                // amount = 0
-                $response = $this->client->request('GET', 'products', [
-                    'query' => [
-                        'stock' => 'false'
-                    ],
-                ]);
-            }
-        } catch (ClientException $e) {
-            return;
-        } catch (\Exception $e) {
-            $this->logger->error($e->getMessage());
-            return 'Connection error';
-        }
-
-        $items = \json_decode((string) $response->getBody(), true);
-        if (empty($items) || !is_array($items)) {
-            return;
+            $items = $this->client->list(self::ENTITY_NAME, $filter->toArray());
+        } catch (ExceptionInterface $e) {
+            $this->throwException($e);
         }
 
         $products = [];
         foreach ($items as $item) {
-            $product = new Product($item['id']);
-            $product->setName($item['name']);
-            $product->setAmount($item['amount']);
-            $errors = $this->validator->validate($product);
-            if (count($errors) > 0) {
-                $this->logger->error((string) $errors);
-                continue;
-            }
-            $products[] = $product;
+            $products[] = $this->setProduct($item);
         }
-        //  = $body;
+
         return $products;
     }
 
-    public function save(Product &$product, ?Product $orginalProduct = null)
+    /**
+     * @throws ConnectionException
+     */
+    public function save(Product $product): void
     {
-        $result = [
-            'error' => false,
-            'messages' => [],
-        ];
-        $response = null;
-
         try {
-            if (null === $orginalProduct) {
-                $response = $this->client->request('POST', 'products', [
-                    'json' => [
-                        'name' => $product->getName(),
-                        'amount' => $product->getAmount(),
-                    ],
-                ]);
-            } elseif (
-                $product->getName() != $orginalProduct->getName()
-                && $product->getAmount() != $orginalProduct->getAmount()
-            ) {
-                $response = $this->client->request('PUT', 'products/' . $product->getId(), [
-                    'json' => [
-                        'name' => $product->getName(),
-                        'amount' => $product->getAmount(),
-                    ],
-                ]);
+            if (null === $this->originalProduct) {
+                $item = $this->client->post(self::ENTITY_NAME, $product->toArray());
+            } elseif ($product == $this->originalProduct) {
+                return;
             } else {
-                $data = [];
-                if ($product->getName() != $orginalProduct->getName()) {
-                    $data = [
-                        'name' => $product->getName(),
-                    ];
-                } else {
-                    $data = [
-                        'amount' => $product->getAmount(),
-                    ];
+                $data = $product->toArray();
+                $originalData = $this->originalProduct->toArray();
+                foreach ($data as $key => $value) {
+                    if ($data[$key] === $originalData[$key]) {
+                        unset($data[$key]);
+                    }
                 }
-                $response = $this->client->request('PATCH', 'products/' . $product->getId(), [
-                    'json' => $data,
-                ]);
+                if (count($data) === count($originalData)) {
+                    $item = $this->client->put(self::ENTITY_NAME, $product->getId(), $data);
+                } else {
+                    $item = $this->client->patch(self::ENTITY_NAME, $product->getId(), $data);
+                }
             }
-        } catch (\Exception $e) {
-            $result['error'] = true;
-            $result['messages'][] = 'Data saving error!';
-            $this->logger->error($e->getMessage());
+            $product = $this->setProduct($item);
+        } catch (ExceptionInterface $e) {
+            $this->throwException($e);
         }
-
-        if (null !== $response) {
-            $item = \json_decode((string) $response->getBody(), true);
-            if (empty($item) || !is_array($item)) {
-                $result['error'] = true;
-                $errorMsg = 'Read saved data error!';
-                $result['messages'][] = $errorMsg;
-                $this->logger->error($errorMsg);
-            } elseif (null === ($product = $this->setProduct($item))) {
-                $result['error'] = true;
-                $errorMsg = 'Read saved data error!';
-                $result['messages'][] = $errorMsg;
-                $this->logger->error($errorMsg, $item);
-            }
-        }
-
-        return $result;
     }
 
-    public function remove(Product $product)
+    /**
+     * @throws ConnectionException
+     */
+    public function remove(Product $product): void
     {
-        $result = [
-            'error' => false,
-            'messages' => [],
-        ];
-
         try {
-            $response = $this->client->request('DELETE', 'products/' . $product->getId());
-        } catch (\Exception $e) {
-            $result['error'] = true;
-            $result['messages'][] = 'Data saving error!';
-            $this->logger->error($e->getMessage());
+            $this->client->delete(self::ENTITY_NAME, $product->getId());
+        } catch (ExceptionInterface $e) {
+            $this->throwException($e);
         }
-
-        return $result;
     }
 
-    private function setProduct($item)
+    private function setProduct(array $item): ?Product
     {
-        if (!is_array($item)) {
-            return;
-        }
         $propertyAccessor = PropertyAccess::createPropertyAccessor();
 
         $id = (int) $propertyAccessor->getValue($item, '[id]');
-        if (!$id) {
-            return;
+        if (1 > $id) {
+            return null;
         }
 
         $product = new Product($id);
         $product->setName($propertyAccessor->getValue($item, '[name]'));
         $product->setAmount($propertyAccessor->getValue($item, '[amount]'));
-        $errors = $this->validator->validate($product);
-        if (count($errors) > 0) {
-            $this->logger->error((string) $errors);
-            return;
-        }
 
         return $product;
+    }
+
+    /**
+     * @throws ConnectionException
+     */
+    private function throwException(ExceptionInterface $e): never
+    {
+        throw new ConnectionException($e);
     }
 }

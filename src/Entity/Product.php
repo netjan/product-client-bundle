@@ -1,15 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NetJan\ProductClientBundle\Entity;
 
 use Symfony\Component\Validator\Constraints as Assert;
 
-/**
- */
 class Product
 {
-    /**
-     */
     private $id;
 
     /**
@@ -29,6 +27,14 @@ class Product
     public function __construct(?int $id = null)
     {
         $this->id = $id;
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'amount' => $this->amount,
+        ];
     }
 
     public function getId(): ?int
